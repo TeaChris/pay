@@ -1,0 +1,9 @@
+node_modules/
+dist/
+keys/
+.env
+.env.local
+.env.production
+*.pem
+coverage/
+drizzle/meta/
