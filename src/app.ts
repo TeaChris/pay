@@ -5,6 +5,7 @@ import { ipExtract } from './middleware/ip-extract.js'
 import { mfaRoutes } from './modules/mfa/mfa.routes.js'
 import { authRoutes } from './modules/auth/auth.routes.js'
 import { createCorsMiddleware } from './middleware/cors.js'
+import { REQUEST_BODY_MAX_SIZE } from './config/constants.js'
 import { errorHandler } from './middleware/error-handler.js'
 import { requestLogger } from './middleware/request-logger.js'
 import { securityHeaders } from './middleware/secure-headers.js'
@@ -22,6 +23,18 @@ export function createApp(): Hono<AppEnv> {
   app.use('*', requestLogger)
   app.use('*', securityHeaders)
   app.use('*', createCorsMiddleware())
+
+  // ─── Body Size Limit ──────────────────────────────────────────
+  app.use('*', async (c, next) => {
+    const contentLength = c.req.header('content-length')
+    if (contentLength && parseInt(contentLength, 10) > REQUEST_BODY_MAX_SIZE) {
+      return c.json(
+        { success: false, error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body too large' } },
+        413,
+      )
+    }
+    await next()
+  })
 
   // ─── Health Check ──────────────────────────────────────────
   app.get('/health', (c) => {
