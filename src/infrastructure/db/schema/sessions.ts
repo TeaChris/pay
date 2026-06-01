@@ -20,6 +20,7 @@ export const sessions = pgTable(
     deviceType: varchar('device_type', { length: 50 }),
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
+    mfaVerified: boolean('mfa_verified').default(false).notNull(),
     lastActiveAt: timestamp('last_active_at', { withTimezone: true }).defaultNow().notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     revoked: boolean('revoked').default(false).notNull(),
