@@ -11,7 +11,7 @@ export const permissions = pgTable(
   'permissions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    name: varchar('name', { length: 100 }).notNull(),
+    name: varchar('name', { length: 100 }).notNull().unique(),
     description: text('description'),
     resource: varchar('resource', { length: 50 }).notNull(),
     action: varchar('action', { length: 50 }).notNull(),
