@@ -9,14 +9,14 @@ export function generateToken(bytes = 32): string {
 }
 
 /**
- * Generate MFA recovery codes in `xxxx-xxxx` format.
- * Each code has 40 bits of entropy (5 bytes).
+ * Generate MFA recovery codes in `xxxx-xxxx-xxxx-xxxx` format.
+ * Each code has 64 bits of entropy (8 bytes).
  */
 export function generateRecoveryCodes(count: number): string[] {
   const codes: string[] = [];
   for (let i = 0; i < count; i++) {
-    const hex = randomBytes(5).toString('hex');
-    codes.push(`${hex.slice(0, 4)}-${hex.slice(4, 8)}`);
+    const hex = randomBytes(8).toString('hex');
+    codes.push(`${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`);
   }
   return codes;
 }
