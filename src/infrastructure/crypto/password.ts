@@ -27,9 +27,26 @@ export async function verifyPassword(hash: string, password: string): Promise<bo
   }
 }
 
+let _dummyHash: string | undefined;
+
 /**
- * Pre-computed dummy hash for timing-safe comparison when user does not exist.
- * Prevents enumeration by ensuring login always performs a hash comparison.
+ * Initialize the dummy hash with a real Argon2id hash.
+ * Must be called during application startup before handling requests.
  */
-export const DUMMY_HASH =
-  '$argon2id$v=19$m=65536,t=3,p=4$c29tZXNhbHRoZXJl$dummyhashvaluefortimingenumeration';
+export async function initDummyHash(): Promise<void> {
+  if (!_dummyHash) {
+    _dummyHash = await hashPassword('__dummy_password_never_used__');
+  }
+}
+
+/**
+ * Get the pre-computed dummy hash for timing-safe comparison.
+ * Ensures login always performs a full Argon2id hash computation
+ * regardless of whether the user exists, preventing enumeration.
+ */
+export function getDummyHash(): string {
+  if (!_dummyHash) {
+    throw new Error('Dummy hash not initialized. Call initDummyHash() during startup.');
+  }
+  return _dummyHash;
+}
