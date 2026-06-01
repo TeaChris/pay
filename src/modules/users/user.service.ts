@@ -1,4 +1,4 @@
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../../infrastructure/db/client.js';
 import { users, roles } from '../../infrastructure/db/schema/index.js';
 import { hashPassword } from '../../infrastructure/crypto/password.js';
@@ -131,35 +131,24 @@ export async function incrementFailedLogins(userId: string): Promise<boolean> {
   const db = getDb();
   const logger = getLogger();
 
-  const [user] = await db
-    .select({ failedLoginCount: users.failedLoginCount })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  if (!user) return false;
-
-  const newCount = user.failedLoginCount + 1;
-  const shouldLock = newCount >= ACCOUNT_LOCK_THRESHOLD;
-
-  await db
+  const [result] = await db
     .update(users)
     .set({
-      failedLoginCount: newCount,
+      failedLoginCount: sql`failed_login_count + 1`,
       lastFailedLogin: new Date(),
-      ...(shouldLock
-        ? {
-            accountLocked: true,
-            accountLockedAt: new Date(),
-            lockReason: `Exceeded ${ACCOUNT_LOCK_THRESHOLD} failed login attempts`,
-          }
-        : {}),
+      accountLocked: sql<boolean>`CASE WHEN failed_login_count + 1 >= ${ACCOUNT_LOCK_THRESHOLD} THEN true ELSE account_locked END`,
+      accountLockedAt: sql`CASE WHEN failed_login_count + 1 >= ${ACCOUNT_LOCK_THRESHOLD} AND NOT account_locked THEN NOW() ELSE account_locked_at END`,
+      lockReason: sql<string>`CASE WHEN failed_login_count + 1 >= ${ACCOUNT_LOCK_THRESHOLD} THEN ${'Exceeded ' + ACCOUNT_LOCK_THRESHOLD + ' failed login attempts'} ELSE lock_reason END`,
       updatedAt: new Date(),
     })
-    .where(eq(users.id, userId));
+    .where(eq(users.id, userId))
+    .returning({ failedLoginCount: users.failedLoginCount });
 
+  if (!result) return false;
+
+  const shouldLock = result.failedLoginCount >= ACCOUNT_LOCK_THRESHOLD;
   if (shouldLock) {
-    logger.warn({ userId, attempts: newCount }, 'account locked due to failed logins');
+    logger.warn({ userId, attempts: result.failedLoginCount }, 'account locked due to failed logins');
   }
 
   return shouldLock;
