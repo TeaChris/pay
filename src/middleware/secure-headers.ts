@@ -5,7 +5,7 @@ import { secureHeaders } from 'hono/secure-headers';
  * Sets HSTS, prevents framing, sniffing, and applies restrictive CSP.
  */
 export const securityHeaders = secureHeaders({
-  strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+  strictTransportSecurity: 'max-age=31536000; includeSubDomains; preload',
   xFrameOptions: 'DENY',
   xContentTypeOptions: 'nosniff',
   referrerPolicy: 'strict-origin-when-cross-origin',
