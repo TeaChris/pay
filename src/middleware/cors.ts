@@ -11,7 +11,7 @@ export function createCorsMiddleware() {
   return cors({
     origin: (origin) => {
       if (allowedOrigins.includes(origin)) return origin;
-      return '';
+      return null;
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
