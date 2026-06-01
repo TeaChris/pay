@@ -1,4 +1,5 @@
 /** Security constants and rate-limit configurations. */
+import { getEnv } from './env.js';
 
 // ─── Token Lifetimes ────────────────────────────────────────────
 export const ACCESS_TOKEN_TTL_SEC = 900; // 15 minutes (overridden by env)
@@ -10,6 +11,18 @@ export const PASSWORD_RESET_TTL_SEC = 3_600; // 1 hour
 // ─── Cookie Names ───────────────────────────────────────────────
 export const ACCESS_COOKIE_NAME = "__Host-at";
 export const REFRESH_COOKIE_NAME = "__Secure-rt";
+
+/**
+ * Get cookie names based on COOKIE_SECURE setting.
+ * __Host- and __Secure- prefixes require Secure=true (HTTPS).
+ * In development without HTTPS, use non-prefixed names.
+ */
+export function getCookieNames(): { access: string; refresh: string } {
+  const env = getEnv();
+  return env.COOKIE_SECURE
+    ? { access: '__Host-at', refresh: '__Secure-rt' }
+    : { access: 'at', refresh: 'rt' };
+}
 
 // ─── Rate Limiting ──────────────────────────────────────────────
 export interface RateLimitConfig {
