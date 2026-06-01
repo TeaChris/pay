@@ -36,11 +36,17 @@ const envSchema = z.object({
 
   // MFA
   MFA_ISSUER: z.string().min(1).default('PayApp'),
-  MFA_ENCRYPTION_KEY: z.string().length(64, 'MFA_ENCRYPTION_KEY must be 64 hex characters (32 bytes)'),
+  MFA_ENCRYPTION_KEY: z.string()
+    .length(64, 'MFA_ENCRYPTION_KEY must be 64 hex characters (32 bytes)')
+    .regex(/^[0-9a-fA-F]+$/, 'MFA_ENCRYPTION_KEY must be valid hexadecimal')
+    .refine((key) => !/^0+$/.test(key), 'MFA_ENCRYPTION_KEY must not be all zeroes — generate with: openssl rand -hex 32'),
 
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
-});
+}).refine(
+  (data) => data.NODE_ENV !== 'production' || data.COOKIE_SECURE === true,
+  { message: 'COOKIE_SECURE must be true in production', path: ['COOKIE_SECURE'] },
+);
 
 export type Env = z.infer<typeof envSchema>;
 
