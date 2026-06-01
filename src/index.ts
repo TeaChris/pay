@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { loadEnv, getEnv } from './config/env.js';
 import { loadKeys } from './config/keys.js';
+import { initDummyHash } from './infrastructure/crypto/password.js';
 import { createApp } from './app.js';
 import { connectRedis, closeRedis, healthCheckRedis } from './infrastructure/redis/client.js';
 import { closeDb } from './infrastructure/db/client.js';
@@ -19,6 +20,9 @@ async function main(): Promise<void> {
   // 3. Load JWT keys
   await loadKeys();
   logger.info('JWT keys loaded');
+
+  // 3.5. Initialize timing-safe dummy hash
+  await initDummyHash();
 
   // 4. Connect Redis
   await connectRedis();
