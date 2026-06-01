@@ -4,14 +4,16 @@ import { getEnv } from '../../config/env.js';
 let _redis: Redis | undefined;
 
 export function createRedis(url?: string): Redis {
-  const redis = new Redis(url ?? getEnv().REDIS_URL, {
+  const redisUrl = url ?? getEnv().REDIS_URL;
+  const useTls = redisUrl.startsWith('rediss://');
+  const redis = new Redis(redisUrl, {
     maxRetriesPerRequest: 3,
     lazyConnect: true,
     retryStrategy(times: number): number | null {
       if (times > 10) return null; // stop retrying
       return Math.min(times * 200, 5_000);
     },
-    tls: getEnv().NODE_ENV === 'production' ? {} : undefined,
+    tls: useTls ? {} : undefined,
   });
 
   return redis;
