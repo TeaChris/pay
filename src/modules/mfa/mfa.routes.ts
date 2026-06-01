@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
-import { setCookie } from 'hono/cookie';
+import { setCookie, getCookie } from 'hono/cookie';
 import type { AppEnv } from '../../shared/types.js';
 import { authenticate } from '../../middleware/authenticate.js';
 import { rateLimiter } from '../../middleware/rate-limiter.js';
 import { validateBody } from '../../middleware/validate.js';
-import { RATE_LIMITS, ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME } from '../../config/constants.js';
+import { RATE_LIMITS, getCookieNames } from '../../config/constants.js';
 import { getEnv } from '../../config/env.js';
 import { mfaVerifySchema, mfaDisableSchema } from './mfa.schemas.js';
 import {
@@ -14,15 +14,16 @@ import {
   verifyRecoveryCode,
   disableMfa,
 } from './mfa.service.js';
-import { verifyMfaChallengeToken } from '../tokens/token.service.js';
-import { signAccessToken } from '../tokens/token.service.js';
+import { verifyMfaChallengeToken, signAccessToken, verifyAccessToken } from '../tokens/token.service.js';
 import { createRefreshToken } from '../tokens/refresh.service.js';
 import { createSession, parseDeviceInfo } from '../sessions/session.service.js';
 import { findUserById, updateLastLogin } from '../users/user.service.js';
 import { verifyPassword } from '../../infrastructure/crypto/password.js';
 import { auditLog } from '../audit/audit.service.js';
-import { InvalidCredentialsError, ForbiddenError } from '../../shared/errors.js';
+import { InvalidCredentialsError, ForbiddenError, AuthenticationError } from '../../shared/errors.js';
 import { getUserProfile } from '../users/user.service.js';
+import { getRedis } from '../../infrastructure/redis/client.js';
+import { RedisKeys } from '../../infrastructure/redis/keys.js';
 
 const mfaRoutes = new Hono<AppEnv>();
 
@@ -69,6 +70,17 @@ mfaRoutes.post(
     if (mfaChallengeToken) {
       const challengePayload = await verifyMfaChallengeToken(mfaChallengeToken);
       const userId = challengePayload.sub;
+      const jti = challengePayload.jti;
+
+      // Single-use enforcement: check and decrement attempt counter
+      const redis = getRedis();
+      const challengeKey = RedisKeys.mfaChallengeAttempts(jti);
+      const remaining = await redis.decr(challengeKey);
+
+      if (remaining < 0) {
+        await redis.del(challengeKey);
+        throw new AuthenticationError('MFA challenge expired or attempts exhausted');
+      }
 
       // Try TOTP code first, then recovery code
       let valid = await verifyMfaCode(userId, code);
@@ -96,6 +108,9 @@ mfaRoutes.post(
       const user = await findUserById(userId);
       if (!user) throw new InvalidCredentialsError();
 
+      // MFA passed — consume the challenge token
+      await redis.del(challengeKey);
+
       const profile = await getUserProfile(userId);
       const deviceInfo = parseDeviceInfo(c.req.header('user-agent') ?? null);
       const session = await createSession({
@@ -103,6 +118,7 @@ mfaRoutes.post(
         ipAddress: c.get('clientIp'),
         userAgent: c.req.header('user-agent') ?? null,
         deviceInfo,
+        mfaVerified: true,
       });
 
       const accessToken = await signAccessToken({
@@ -116,7 +132,8 @@ mfaRoutes.post(
       await updateLastLogin(userId, c.get('clientIp'));
 
       // Set cookies
-      setCookie(c, ACCESS_COOKIE_NAME, accessToken, {
+      const cookieNames = getCookieNames();
+      setCookie(c, cookieNames.access, accessToken, {
         httpOnly: true,
         secure: env.COOKIE_SECURE,
         sameSite: 'Strict',
@@ -124,7 +141,7 @@ mfaRoutes.post(
         maxAge: env.JWT_ACCESS_TOKEN_TTL,
       });
 
-      setCookie(c, REFRESH_COOKIE_NAME, refreshToken, {
+      setCookie(c, cookieNames.refresh, refreshToken, {
         httpOnly: true,
         secure: env.COOKIE_SECURE,
         sameSite: 'Strict',
@@ -146,11 +163,17 @@ mfaRoutes.post(
       return c.json({ success: true, data: { message: 'Login successful' } });
     }
 
-    // No challenge token — this is MFA setup confirmation (requires auth)
-    // Manually check for auth cookie since we can't use authenticate middleware conditionally
-    const userId = c.get('userId');
-    if (!userId) {
-      throw new ForbiddenError('Authentication required');
+    // MFA setup confirmation — requires authentication via access token cookie
+    const cookieNames = getCookieNames();
+    const accessCookie = getCookie(c, cookieNames.access);
+    if (!accessCookie) {
+      throw new AuthenticationError();
+    }
+
+    const tokenPayload = await verifyAccessToken(accessCookie);
+    const userId = tokenPayload.sub;
+    if (!userId || typeof userId !== 'string') {
+      throw new AuthenticationError();
     }
 
     const enabled = await verifyAndEnableMfa(userId, code);
