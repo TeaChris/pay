@@ -115,7 +115,7 @@ export async function seedRolesAndPermissions(): Promise<void> {
                   await db
                         .insert(rolePermissions)
                         .values({ roleId, permissionId: permId })
-                        .onConflictDoNothing()
+                        .onConflictDoNothing({ target: [rolePermissions.roleId, rolePermissions.permissionId] })
             }
       }
 
