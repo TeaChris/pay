@@ -1,27 +1,31 @@
-export { roles } from './roles.js'
-export { users } from './users.js'
-export { sessions } from './sessions.js'
-export { auditLogs } from './audit-logs.js'
-export { mfaSecrets } from './mfa-secrets.js'
-export { permissions } from './permissions.js'
-export { refreshTokens } from './refresh-tokens.js'
-export { passwordResets } from './password-resets.js'
-export { rolePermissions } from './role-permissions.js'
-export { emailVerifications } from './email-verifications.js'
-export { failedLoginAttempts } from './failed-login-attempts.js'
+export {
+  roles,
+  users,
+  sessions,
+  auditLogs,
+  mfaSecrets,
+  permissions,
+  refreshTokens,
+  passwordResets,
+  rolePermissions,
+  emailVerifications,
+  failedLoginAttempts,
+} from './tables.js'
 
 // ─── Inferred Types ─────────────────────────────────────────────
-import type { users } from './users.js'
-import type { roles } from './roles.js'
-import type { sessions } from './sessions.js'
-import type { auditLogs } from './audit-logs.js'
-import type { mfaSecrets } from './mfa-secrets.js'
-import type { permissions } from './permissions.js'
-import type { refreshTokens } from './refresh-tokens.js'
-import type { passwordResets } from './password-resets.js'
-import type { rolePermissions } from './role-permissions.js'
-import type { emailVerifications } from './email-verifications.js'
-import type { failedLoginAttempts } from './failed-login-attempts.js'
+import type {
+  roles,
+  users,
+  sessions,
+  auditLogs,
+  mfaSecrets,
+  permissions,
+  refreshTokens,
+  passwordResets,
+  rolePermissions,
+  emailVerifications,
+  failedLoginAttempts,
+} from './tables.js'
 
 export type User = typeof users.$inferSelect
 export type Role = typeof roles.$inferSelect
