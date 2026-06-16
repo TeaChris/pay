@@ -85,7 +85,7 @@ export function startEmailWorker(): Worker<EmailJobData> {
       );
     },
     {
-      connection: getRedis().duplicate(),
+      connection: getRedis().duplicate({ maxRetriesPerRequest: null }),
       concurrency: 5,
       limiter: {
         max: 10,
