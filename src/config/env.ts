@@ -43,6 +43,11 @@ const envSchema = z.object({
 
   // Logging
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // Email (Resend)
+  RESEND_API_KEY: z.string().min(1),
+  EMAIL_FROM_ADDRESS: z.string().min(1),
+  EMAIL_REPLY_TO: z.string().optional(),
 }).refine(
   (data) => data.NODE_ENV !== 'production' || data.COOKIE_SECURE === true,
   { message: 'COOKIE_SECURE must be true in production', path: ['COOKIE_SECURE'] },
