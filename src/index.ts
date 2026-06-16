@@ -6,6 +6,8 @@ import { closeDb } from './infrastructure/db/client.js'
 import { getLogger } from './infrastructure/logging/logger.js'
 import { initDummyHash } from './infrastructure/crypto/password.js'
 import { seedRolesAndPermissions } from './modules/permissions/permission.service.js'
+import { startEmailWorker, closeEmailWorker } from './modules/email/email.worker.js'
+import { closeEmailQueue } from './modules/email/email.queue.js'
 
 import {
       connectRedis,
@@ -38,13 +40,16 @@ async function main(): Promise<void> {
       }
       logger.info('Redis connected')
 
-      // 5. Seed roles and permissions
+      // 5. Start email worker
+      startEmailWorker()
+
+      // 6. Seed roles and permissions
       await seedRolesAndPermissions()
 
-      // 6. Create app
+      // 7. Create app
       const app = createApp()
 
-      // 7. Start server
+      // 8. Start server
       const server = serve(
             {
                   fetch: app.fetch,
@@ -65,6 +70,10 @@ async function main(): Promise<void> {
             server.close(() => {
                   logger.info('HTTP server closed')
             })
+
+            await closeEmailWorker()
+            await closeEmailQueue()
+            logger.info('Email worker and queue closed')
 
             await closeRedis()
             logger.info('Redis connection closed')
