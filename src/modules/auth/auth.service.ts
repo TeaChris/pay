@@ -23,6 +23,7 @@ import { sha256 } from '../../infrastructure/crypto/hash.js'
 import { getDb } from '../../infrastructure/db/client.js'
 import { getUserProfile } from '../users/user.service.js'
 import { auditLog } from '../audit/audit.service.js'
+import { getEnv } from '../../config/env.js'
 import { eq, and } from 'drizzle-orm'
 import {
       emailVerifications,
@@ -48,6 +49,11 @@ import {
       EMAIL_VERIFICATION_TTL_SEC,
       PASSWORD_RESET_TTL_SEC,
 } from '../../config/constants.js'
+import {
+      queueVerificationEmail,
+      queuePasswordResetEmail,
+      queueAccountLockedEmail,
+} from '../email/email.service.js'
 
 // ─── Registration ───────────────────────────────────────────────
 
@@ -88,6 +94,19 @@ export async function register(params: RegisterParams) {
             requestId: params.requestId,
             correlationId: params.correlationId,
       })
+
+      // Queue verification email (async, non-blocking)
+      const env = getEnv()
+      const verificationUrl = `${env.APP_URL}/auth/verify-email?token=${rawToken}`
+      queueVerificationEmail(
+            user.email,
+            {
+                  userName: params.displayName ?? user.email,
+                  verificationUrl,
+                  expiresInHours: Math.round(EMAIL_VERIFICATION_TTL_SEC / 3600),
+            },
+            params.correlationId,
+      )
 
       return { userId: user.id, emailVerificationToken: rawToken }
 }
@@ -421,6 +440,20 @@ export async function requestPasswordReset(
             requestId: params.requestId,
             correlationId: params.correlationId,
       })
+
+      // Queue password reset email (async, non-blocking)
+      const env = getEnv()
+      const resetUrl = `${env.APP_URL}/auth/reset-password?token=${rawToken}`
+      queuePasswordResetEmail(
+            user.email,
+            {
+                  userName: user.displayName ?? user.email,
+                  resetUrl,
+                  expiresInMinutes: Math.round(PASSWORD_RESET_TTL_SEC / 60),
+                  ipAddress: params.ipAddress,
+            },
+            params.correlationId,
+      )
 
       return { token: rawToken }
 }
