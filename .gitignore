@@ -7,3 +7,4 @@ keys/
 *.pem
 coverage/
 drizzle/meta/
+*.tsbuildinfo
