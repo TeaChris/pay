@@ -1,0 +1,14 @@
+node_modules/
+dist/
+keys/
+.env
+.env.*
+*.pem
+coverage/
+drizzle/meta/
+.git
+.github
+tests/
+*.md
+*.tsbuildinfo
+.husky/
