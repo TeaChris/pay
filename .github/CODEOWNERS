@@ -1,0 +1,29 @@
+# Critical infrastructure — requires owner review
+* @TeaChris
+
+# Authentication & Authorization
+/src/modules/auth/              @TeaChris
+/src/modules/mfa/               @TeaChris
+/src/modules/sessions/          @TeaChris
+/src/modules/tokens/            @TeaChris
+/src/modules/permissions/       @TeaChris
+
+# Cryptography
+/src/infrastructure/crypto/     @TeaChris
+
+# Database schema & migrations
+/src/infrastructure/db/         @TeaChris
+/drizzle/                       @TeaChris
+
+# Security middleware
+/src/middleware/                 @TeaChris
+
+# Configuration & secrets
+/src/config/                    @TeaChris
+
+# CI/CD
+/.github/                       @TeaChris
+
+# Docker
+/Dockerfile                     @TeaChris
+/docker-compose.yml             @TeaChris
