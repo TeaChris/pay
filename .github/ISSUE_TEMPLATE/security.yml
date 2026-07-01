@@ -1,0 +1,58 @@
+---
+name: "\U0001F6A8 Security Vulnerability"
+description: Report a security concern (use private reporting for sensitive issues)
+title: "[Security]: "
+labels: ["security", "triage"]
+assignees:
+  - TeaChris
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ For sensitive vulnerabilities, do NOT open a public issue.
+        Use [GitHub private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) instead.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Security Issue Description
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - "Authentication bypass"
+        - "Authorization / RBAC bypass"
+        - "JWT / token vulnerability"
+        - "Injection (SQL, NoSQL, LDAP)"
+        - "Rate limiting bypass"
+        - "Sensitive data exposure"
+        - "Dependency vulnerability (CVE)"
+        - "Cryptographic weakness"
+        - "Security hardening"
+        - "Other"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Estimated Severity
+      options:
+        - "Critical — Active exploitation possible"
+        - "High — Exploitable with moderate effort"
+        - "Medium — Limited impact"
+        - "Low — Defense-in-depth improvement"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: This does NOT contain details that could enable exploitation
+          required: true

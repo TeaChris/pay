@@ -2,9 +2,13 @@ node_modules/
 dist/
 keys/
 .env
-.env.local
-.env.production
+.env.*
 *.pem
 coverage/
 drizzle/meta/
+.git
+.github
+tests/
+*.md
 *.tsbuildinfo
+.husky/

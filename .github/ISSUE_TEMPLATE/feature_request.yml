@@ -1,0 +1,53 @@
+---
+name: "✨ Feature Request"
+description: Suggest a new feature or API endpoint
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees:
+  - TeaChris
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      placeholder: "As a [user type], I need [capability] so that [benefit]..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the API design, new endpoints, or system changes.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature Area
+      options:
+        - "Authentication & Identity"
+        - "Authorization / RBAC"
+        - "MFA"
+        - "Session Management"
+        - "Email Notifications"
+        - "Accounts / Users"
+        - "Transactions"
+        - "Transfers / Payments"
+        - "Audit / Compliance"
+        - "Infrastructure"
+        - "Other"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: considerations
+    attributes:
+      label: Implementation Considerations
+      options:
+        - label: Requires new database tables or schema changes
+        - label: Requires new environment variables or secrets
+        - label: Requires frontend changes (coordinate with frontend repo)
+        - label: Involves financial data or monetary operations
+        - label: Requires new RBAC permissions

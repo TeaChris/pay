@@ -1,0 +1,222 @@
+# =============================================================================
+# Production Deployment — PAY Backend
+# =============================================================================
+# Triggered on push to main (after PR merge).
+# Builds Docker image, runs migration validation, deploys, and smoke tests.
+#
+# This workflow is deployment-platform agnostic. Configure the deploy step
+# for your target: Railway, Render, Fly.io, AWS ECS, or custom VPS.
+# =============================================================================
+
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # =========================================================================
+  # Gate — Full Validation
+  # =========================================================================
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pay_auth_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pay_auth_test?sslmode=disable
+      REDIS_URL: redis://localhost:6379/1
+      LOG_LEVEL: fatal
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate test keys
+        run: npm run generate-keys
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run database migrations
+        run: npx drizzle-kit push
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pay_auth_test?sslmode=disable
+
+      - name: Run all tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # =========================================================================
+  # Build & Push Docker Image
+  # =========================================================================
+  build-image:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [validate]
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build-push.outputs.digest }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build-push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Report image details
+        run: |
+          echo "## 🐳 Docker Image Built" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:** ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** ${{ steps.build-push.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  # =========================================================================
+  # Deploy (Configure for your platform)
+  # =========================================================================
+  # deploy:
+  #   name: Deploy to Production
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 10
+  #   needs: [build-image]
+  #   environment:
+  #     name: production
+  #     url: ${{ vars.PRODUCTION_URL }}
+  #
+  #   steps:
+  #     # === Railway ===
+  #     # - name: Deploy to Railway
+  #     #   uses: bervProject/railway-deploy@main
+  #     #   with:
+  #     #     railway_token: ${{ secrets.RAILWAY_TOKEN }}
+  #     #     service: pay-auth
+  #
+  #     # === Render ===
+  #     # - name: Deploy to Render
+  #     #   run: |
+  #     #     curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+  #
+  #     # === Fly.io ===
+  #     # - name: Deploy to Fly.io
+  #     #   uses: superfly/flyctl-actions/setup-flyctl@master
+  #     # - run: flyctl deploy --image ${{ needs.build-image.outputs.image-tag }}
+  #     #   env:
+  #     #     FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  # =========================================================================
+  # Post-Deployment Health Check
+  # =========================================================================
+  # smoke-test:
+  #   name: Smoke Tests
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 5
+  #   needs: [deploy]
+  #
+  #   steps:
+  #     - name: Wait for deployment to stabilize
+  #       run: sleep 20
+  #
+  #     - name: Health check
+  #       run: |
+  #         STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ vars.PRODUCTION_URL }}/health")
+  #         echo "Health check status: $STATUS"
+  #         if [ "$STATUS" != "200" ]; then
+  #           echo "::error::Health check failed with status $STATUS"
+  #           exit 1
+  #         fi
+  #
+  #     - name: Verify health response
+  #       run: |
+  #         RESPONSE=$(curl -s "${{ vars.PRODUCTION_URL }}/health")
+  #         echo "Health response: $RESPONSE"
+  #         echo "$RESPONSE" | grep -q '"status":"ok"' || exit 1
+  #
+  #     - name: Verify security headers
+  #       run: |
+  #         HEADERS=$(curl -sI "${{ vars.PRODUCTION_URL }}/health")
+  #         echo "## Security Headers" >> $GITHUB_STEP_SUMMARY
+  #         for header in "x-frame-options" "x-content-type-options" "strict-transport-security"; do
+  #           if echo "$HEADERS" | grep -qi "$header"; then
+  #             echo "✅ $header" >> $GITHUB_STEP_SUMMARY
+  #           else
+  #             echo "❌ $header MISSING" >> $GITHUB_STEP_SUMMARY
+  #           fi
+  #         done

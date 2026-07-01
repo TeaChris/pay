@@ -1,0 +1,7 @@
+dist/
+node_modules/
+drizzle/
+coverage/
+keys/
+package-lock.json
+*.pem

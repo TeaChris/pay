@@ -1,0 +1,88 @@
+---
+name: "\U0001F41B Bug Report"
+description: Report a bug in the PAY backend
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees:
+  - TeaChris
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: API call, sequence of events, or minimal reproduction.
+      placeholder: |
+        1. POST /auth/login with body {...}
+        2. Response returns...
+        3. Expected...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "Critical — Auth bypass, data exposure, financial data corruption"
+        - "High — API endpoint broken, auth flow broken"
+        - "Medium — Degraded performance, non-critical endpoint affected"
+        - "Low — Minor issue, workaround available"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected Area
+      options:
+        - "Authentication (login, register, logout, refresh)"
+        - "MFA (setup, verify, disable, recovery)"
+        - "Sessions (list, revoke)"
+        - "Permissions / RBAC"
+        - "Email System (queue, worker, templates)"
+        - "Database / Migrations"
+        - "Rate Limiting"
+        - "Security Headers / CORS"
+        - "Infrastructure (Redis, PostgreSQL)"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs / API Response
+      description: Paste relevant logs or error responses.
+      render: json
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: financial-impact
+    attributes:
+      label: Financial Impact
+      options:
+        - label: This bug affects financial data, transactions, or monetary operations
+          required: false
