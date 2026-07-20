@@ -44,7 +44,7 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.0.0",
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
     "@types/qrcode": "^1.5.5",
