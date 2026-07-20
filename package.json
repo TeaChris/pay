@@ -42,22 +42,22 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@commitlint/cli": "^21.0.0",
+    "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.0.0",
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
     "@types/qrcode": "^1.5.5",
     "@types/supertest": "^6.0.2",
-    "drizzle-kit": "^0.30.0",
-    "globals": "^17.7.0",
+    "drizzle-kit": "^0.31.10",
+    "globals": "^16.0.0",
     "husky": "^9.1.0",
     "pino-pretty": "^13.0.0",
-    "prettier": "^3.4.0",
+    "prettier": "^3.9.5",
     "supertest": "^7.0.0",
-    "tsx": "^4.19.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.0.0",
+    "typescript-eslint": "^8.63.0",
     "vitest": "^2.1.0"
   }
 }
