@@ -7,7 +7,7 @@
 # =============================================================================
 
 # --- Stage 1: Dependencies ---
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 # --- Stage 2: Build ---
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN npm run build
 RUN npm prune --production
 
 # --- Stage 3: Production Runtime ---
-FROM node:22-alpine AS runner
+FROM node:26-alpine AS runner
 
 # Security: run as non-root
 RUN addgroup --system --gid 1001 nodejs && \
