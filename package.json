@@ -26,29 +26,29 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@hono/node-server": "^1.13.0",
-    "@hono/zod-validator": "^0.9.0",
-    "argon2": "^0.45.0",
-    "bullmq": "^5.80.9",
-    "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.31",
+    "@hono/node-server": "^2.0.10",
+    "@hono/zod-validator": "^0.4.0",
+    "argon2": "^0.41.0",
+    "bullmq": "^5.78.1",
+    "drizzle-orm": "^0.38.0",
+    "hono": "^4.12.0",
     "ioredis": "^5.4.0",
     "jose": "^6.0.0",
     "otpauth": "^9.4.0",
-    "pg": "^8.22.0",
-    "pino": "^9.5.0",
+    "pg": "^8.13.0",
+    "pino": "^10.3.1",
     "qrcode": "^1.5.4",
-    "resend": "^6.17.2",
-    "zod": "^3.24.0"
+    "resend": "^6.12.4",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.0.0",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.1.1",
     "@types/pg": "^8.11.0",
     "@types/qrcode": "^1.5.5",
-    "@types/supertest": "^6.0.2",
+    "@types/supertest": "^7.2.1",
     "drizzle-kit": "^0.31.10",
     "globals": "^16.0.0",
     "husky": "^9.1.0",
@@ -58,6 +58,6 @@
     "tsx": "^4.23.1",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.63.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.10"
   }
 }
