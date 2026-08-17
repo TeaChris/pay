@@ -1,513 +1,561 @@
 import {
-      createUser,
-      findUserByEmail,
-      updateLastLogin,
-      incrementFailedLogins,
-} from '../users/user.service.js'
+  createUser,
+  findUserByEmail,
+  updateLastLogin,
+  incrementFailedLogins,
+} from '../users/user.service.js';
 import {
-      createSession,
-      parseDeviceInfo,
-      revokeAllUserSessions,
-} from '../sessions/session.service.js'
+  createSession,
+  parseDeviceInfo,
+  revokeAllUserSessions,
+} from '../sessions/session.service.js';
+import { createRefreshToken, rotateRefreshToken } from '../tokens/refresh.service.js';
+import { signAccessToken, signMfaChallengeToken } from '../tokens/token.service.js';
+import { generateToken } from '../../infrastructure/crypto/tokens.js';
+import { revokeSession } from '../sessions/session.service.js';
+import { sha256 } from '../../infrastructure/crypto/hash.js';
+import { getDb } from '../../infrastructure/db/client.js';
+import { getUserProfile } from '../users/user.service.js';
+import { auditLog } from '../audit/audit.service.js';
+import { getEnv } from '../../config/env.js';
+import { eq, and } from 'drizzle-orm';
 import {
-      createRefreshToken,
-      rotateRefreshToken,
-} from '../tokens/refresh.service.js'
+  emailVerifications,
+  passwordResets,
+  failedLoginAttempts,
+  users,
+  sessions,
+} from '../../infrastructure/db/schema/index.js';
 import {
-      signAccessToken,
-      signMfaChallengeToken,
-} from '../tokens/token.service.js'
-import { generateToken } from '../../infrastructure/crypto/tokens.js'
-import { revokeSession } from '../sessions/session.service.js'
-import { sha256 } from '../../infrastructure/crypto/hash.js'
-import { getDb } from '../../infrastructure/db/client.js'
-import { getUserProfile } from '../users/user.service.js'
-import { auditLog } from '../audit/audit.service.js'
-import { getEnv } from '../../config/env.js'
-import { eq, and } from 'drizzle-orm'
+  verifyPassword,
+  getDummyHash,
+  hashPassword,
+} from '../../infrastructure/crypto/password.js';
 import {
-      emailVerifications,
-      passwordResets,
-      failedLoginAttempts,
-      users,
-      sessions,
-} from '../../infrastructure/db/schema/index.js'
+  InvalidCredentialsError,
+  AccountLockedError,
+  InvalidTokenError,
+  TokenExpiredError,
+  ConflictError,
+  EmailNotVerifiedError,
+} from '../../shared/errors.js';
+import { EMAIL_VERIFICATION_TTL_SEC, PASSWORD_RESET_TTL_SEC } from '../../config/constants.js';
 import {
-      verifyPassword,
-      getDummyHash,
-      hashPassword,
-} from '../../infrastructure/crypto/password.js'
-import {
-      InvalidCredentialsError,
-      AccountLockedError,
-      InvalidTokenError,
-      TokenExpiredError,
-      ConflictError,
-      EmailNotVerifiedError,
-} from '../../shared/errors.js'
-import {
-      EMAIL_VERIFICATION_TTL_SEC,
-      PASSWORD_RESET_TTL_SEC,
-} from '../../config/constants.js'
-import {
-      queueVerificationEmail,
-      queuePasswordResetEmail,
-      queueAccountLockedEmail,
-} from '../email/email.service.js'
+  queueVerificationEmail,
+  queuePasswordResetEmail,
+  queueAccountLockedEmail,
+} from '../email/email.service.js';
 
 // ─── Registration ───────────────────────────────────────────────
 
 interface RegisterParams {
-      email: string
-      password: string
-      displayName?: string
-      ipAddress: string
-      userAgent: string | null
-      requestId: string
-      correlationId: string
+  email: string;
+  password: string;
+  displayName?: string;
+  ipAddress: string;
+  userAgent: string | null;
+  requestId: string;
+  correlationId: string;
 }
 
 export async function register(params: RegisterParams) {
-      const user = await createUser({
-            email: params.email,
-            password: params.password,
-            displayName: params.displayName,
-      })
+  const user = await createUser({
+    email: params.email,
+    password: params.password,
+    displayName: params.displayName,
+  });
 
-      // Generate email verification token
-      const rawToken = generateToken(32)
-      const tokenHash = sha256(rawToken)
+  // Generate email verification token
+  const rawToken = generateToken(32);
+  const tokenHash = sha256(rawToken);
 
-      const db = getDb()
-      await db.insert(emailVerifications).values({
-            userId: user.id,
-            tokenHash,
-            expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_SEC * 1000),
-      })
+  const db = getDb();
+  await db.insert(emailVerifications).values({
+    userId: user.id,
+    tokenHash,
+    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_SEC * 1000),
+  });
 
-      auditLog({
-            actorId: user.id,
-            action: 'auth.register',
-            resourceType: 'user',
-            resourceId: user.id,
-            ipAddress: params.ipAddress,
-            requestId: params.requestId,
-            correlationId: params.correlationId,
-      })
+  auditLog({
+    actorId: user.id,
+    action: 'auth.register',
+    resourceType: 'user',
+    resourceId: user.id,
+    ipAddress: params.ipAddress,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+  });
 
-      // Queue verification email (async, non-blocking)
-      const env = getEnv()
-      const verificationUrl = `${env.APP_URL}/auth/verify-email?token=${rawToken}`
-      queueVerificationEmail(
-            user.email,
-            {
-                  userName: params.displayName ?? user.email,
-                  verificationUrl,
-                  expiresInHours: Math.round(EMAIL_VERIFICATION_TTL_SEC / 3600),
-            },
-            params.correlationId,
-      )
+  // Queue verification email (async, non-blocking)
+  const env = getEnv();
+  const verificationUrl = `${env.APP_URL}/verify-email?token=${rawToken}`;
+  queueVerificationEmail(
+    user.email,
+    {
+      userName: params.displayName ?? user.email,
+      verificationUrl,
+      expiresInHours: Math.round(EMAIL_VERIFICATION_TTL_SEC / 3600),
+    },
+    params.correlationId,
+  );
 
-      return { userId: user.id, emailVerificationToken: rawToken }
+  return { userId: user.id, emailVerificationToken: rawToken };
 }
 
 // ─── Login ──────────────────────────────────────────────────────
 
 interface LoginParams {
-      email: string
-      password: string
-      ipAddress: string
-      requestId: string
-      correlationId: string
-      userAgent: string | null
+  email: string;
+  password: string;
+  ipAddress: string;
+  requestId: string;
+  correlationId: string;
+  userAgent: string | null;
 }
 
 export async function login(params: LoginParams) {
-      const db = getDb()
-      const user = await findUserByEmail(params.email)
+  const db = getDb();
+  const user = await findUserByEmail(params.email);
 
-      // Timing-safe: always verify a hash even when user doesn't exist
-      if (!user) {
-            await verifyPassword(getDummyHash(), params.password)
+  // Timing-safe: always verify a hash even when user doesn't exist
+  if (!user) {
+    await verifyPassword(getDummyHash(), params.password);
 
-            // Record failed attempt for IP tracking
-            await db
-                  .insert(failedLoginAttempts)
-                  .values({
-                        email: params.email.toLowerCase(),
-                        ipAddress: params.ipAddress,
-                        userAgent: params.userAgent,
-                        reason: 'user_not_found',
-                  })
-                  .catch(() => {
-                        /* best effort */
-                  })
-
-            throw new InvalidCredentialsError()
-      }
-
-      // Check account lock
-      if (user.accountLocked) {
-            auditLog({
-                  actorId: user.id,
-                  action: 'auth.login.failed',
-                  resourceType: 'user',
-                  resourceId: user.id,
-                  details: { reason: 'account_locked' },
-                  severity: 'warn',
-                  ipAddress: params.ipAddress,
-                  requestId: params.requestId,
-                  correlationId: params.correlationId,
-            })
-            throw new AccountLockedError()
-      }
-
-      // Verify password
-      const valid = await verifyPassword(user.passwordHash, params.password)
-      if (!valid) {
-            const locked = await incrementFailedLogins(user.id)
-
-            await db
-                  .insert(failedLoginAttempts)
-                  .values({
-                        userId: user.id,
-                        email: params.email.toLowerCase(),
-                        ipAddress: params.ipAddress,
-                        userAgent: params.userAgent,
-                        reason: 'invalid_password',
-                  })
-                  .catch(() => {
-                        /* best effort */
-                  })
-
-            auditLog({
-                  actorId: user.id,
-                  action: 'auth.login.failed',
-                  resourceType: 'user',
-                  resourceId: user.id,
-                  details: {
-                        reason: 'invalid_password',
-                        accountLocked: locked,
-                  },
-                  severity: locked ? 'critical' : 'warn',
-                  ipAddress: params.ipAddress,
-                  requestId: params.requestId,
-                  correlationId: params.correlationId,
-            })
-
-            if (locked) {
-                  auditLog({
-                        actorId: user.id,
-                        action: 'auth.account.locked',
-                        resourceType: 'user',
-                        resourceId: user.id,
-                        severity: 'critical',
-                        ipAddress: params.ipAddress,
-                        requestId: params.requestId,
-                        correlationId: params.correlationId,
-                  })
-            }
-
-            throw new InvalidCredentialsError()
-      }
-
-      // Require email verification before login
-      if (!user.emailVerified) {
-            throw new EmailNotVerifiedError()
-      }
-
-      // Check if MFA is enabled
-      if (user.mfaEnabled) {
-            const mfaChallengeToken = await signMfaChallengeToken(user.id)
-
-            auditLog({
-                  actorId: user.id,
-                  action: 'auth.login.success',
-                  resourceType: 'user',
-                  resourceId: user.id,
-                  details: { mfaRequired: true },
-                  ipAddress: params.ipAddress,
-                  requestId: params.requestId,
-                  correlationId: params.correlationId,
-            })
-
-            return { mfaRequired: true as const, mfaChallengeToken }
-      }
-
-      // No MFA — complete login
-      const profile = await getUserProfile(user.id)
-      const deviceInfo = parseDeviceInfo(params.userAgent)
-      const session = await createSession({
-            userId: user.id,
-            ipAddress: params.ipAddress,
-            userAgent: params.userAgent,
-            deviceInfo,
-            mfaVerified: false,
+    // Record failed attempt for IP tracking
+    await db
+      .insert(failedLoginAttempts)
+      .values({
+        email: params.email.toLowerCase(),
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent,
+        reason: 'user_not_found',
       })
+      .catch(() => {
+        /* best effort */
+      });
 
-      const accessToken = await signAccessToken({
-            userId: user.id,
-            sessionId: session.id,
-            role: profile.role,
-            mfaVerified: false,
+    throw new InvalidCredentialsError();
+  }
+
+  // Check account lock
+  if (user.accountLocked) {
+    auditLog({
+      actorId: user.id,
+      action: 'auth.login.failed',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { reason: 'account_locked' },
+      severity: 'warn',
+      ipAddress: params.ipAddress,
+      requestId: params.requestId,
+      correlationId: params.correlationId,
+    });
+    throw new AccountLockedError();
+  }
+
+  // Verify password
+  const valid = await verifyPassword(user.passwordHash, params.password);
+  if (!valid) {
+    const locked = await incrementFailedLogins(user.id);
+
+    await db
+      .insert(failedLoginAttempts)
+      .values({
+        userId: user.id,
+        email: params.email.toLowerCase(),
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent,
+        reason: 'invalid_password',
       })
+      .catch(() => {
+        /* best effort */
+      });
 
-      const { token: refreshToken } = await createRefreshToken(session.id)
-      await updateLastLogin(user.id, params.ipAddress)
+    auditLog({
+      actorId: user.id,
+      action: 'auth.login.failed',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: {
+        reason: 'invalid_password',
+        accountLocked: locked,
+      },
+      severity: locked ? 'critical' : 'warn',
+      ipAddress: params.ipAddress,
+      requestId: params.requestId,
+      correlationId: params.correlationId,
+    });
 
+    if (locked) {
       auditLog({
-            actorId: user.id,
-            action: 'auth.login.success',
-            resourceType: 'user',
-            resourceId: user.id,
-            details: { sessionId: session.id },
-            ipAddress: params.ipAddress,
-            requestId: params.requestId,
-            correlationId: params.correlationId,
-      })
+        actorId: user.id,
+        action: 'auth.account.locked',
+        resourceType: 'user',
+        resourceId: user.id,
+        severity: 'critical',
+        ipAddress: params.ipAddress,
+        requestId: params.requestId,
+        correlationId: params.correlationId,
+      });
+    }
 
-      return {
-            mfaRequired: false as const,
-            accessToken,
-            refreshToken,
-            session: { id: session.id },
-      }
+    throw new InvalidCredentialsError();
+  }
+
+  // Require email verification before login
+  if (!user.emailVerified) {
+    throw new EmailNotVerifiedError();
+  }
+
+  // Check if MFA is enabled
+  if (user.mfaEnabled) {
+    const mfaChallengeToken = await signMfaChallengeToken(user.id);
+
+    auditLog({
+      actorId: user.id,
+      action: 'auth.login.success',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { mfaRequired: true },
+      ipAddress: params.ipAddress,
+      requestId: params.requestId,
+      correlationId: params.correlationId,
+    });
+
+    return { mfaRequired: true as const, mfaChallengeToken };
+  }
+
+  // No MFA — complete login
+  const profile = await getUserProfile(user.id);
+  const deviceInfo = parseDeviceInfo(params.userAgent);
+  const session = await createSession({
+    userId: user.id,
+    ipAddress: params.ipAddress,
+    userAgent: params.userAgent,
+    deviceInfo,
+    mfaVerified: false,
+  });
+
+  const accessToken = await signAccessToken({
+    userId: user.id,
+    sessionId: session.id,
+    role: profile.role,
+    mfaVerified: false,
+  });
+
+  const { token: refreshToken } = await createRefreshToken(session.id);
+  await updateLastLogin(user.id, params.ipAddress);
+
+  auditLog({
+    actorId: user.id,
+    action: 'auth.login.success',
+    resourceType: 'user',
+    resourceId: user.id,
+    details: { sessionId: session.id },
+    ipAddress: params.ipAddress,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+  });
+
+  return {
+    mfaRequired: false as const,
+    accessToken,
+    refreshToken,
+    session: { id: session.id },
+  };
 }
 
 // ─── Logout ─────────────────────────────────────────────────────
 
 interface LogoutParams {
-      sessionId: string
-      userId: string
-      requestId: string
-      correlationId: string
-      ipAddress: string
+  sessionId: string;
+  userId: string;
+  requestId: string;
+  correlationId: string;
+  ipAddress: string;
 }
 
 export async function logout(params: LogoutParams): Promise<void> {
-      await revokeSession(params.sessionId, 'user_logout')
+  await revokeSession(params.sessionId, 'user_logout');
 
-      auditLog({
-            actorId: params.userId,
-            action: 'auth.logout',
-            resourceType: 'session',
-            resourceId: params.sessionId,
-            ipAddress: params.ipAddress,
-            requestId: params.requestId,
-            correlationId: params.correlationId,
-      })
+  auditLog({
+    actorId: params.userId,
+    action: 'auth.logout',
+    resourceType: 'session',
+    resourceId: params.sessionId,
+    ipAddress: params.ipAddress,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+  });
 }
 
 // ─── Refresh ────────────────────────────────────────────────────
 
 interface RefreshParams {
-      rawRefreshToken: string
-      ipAddress: string
-      userAgent: string | null
-      requestId: string
-      correlationId: string
+  rawRefreshToken: string;
+  ipAddress: string;
+  userAgent: string | null;
+  requestId: string;
+  correlationId: string;
 }
 
 export async function refresh(params: RefreshParams) {
-      const { newToken, sessionId, userId } = await rotateRefreshToken(
-            params.rawRefreshToken,
-      )
+  const { newToken, sessionId, userId } = await rotateRefreshToken(params.rawRefreshToken);
 
-      const profile = await getUserProfile(userId)
+  const profile = await getUserProfile(userId);
 
-      // Read MFA verification status from the session record, not from user's mfaEnabled flag
-      const db = getDb()
-      const [sessionRecord] = await db
-            .select({ mfaVerified: sessions.mfaVerified })
-            .from(sessions)
-            .where(eq(sessions.id, sessionId))
-            .limit(1)
+  // Read MFA verification status from the session record, not from user's mfaEnabled flag
+  const db = getDb();
+  const [sessionRecord] = await db
+    .select({ mfaVerified: sessions.mfaVerified })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
 
-      const accessToken = await signAccessToken({
-            userId,
-            sessionId,
-            role: profile.role,
-            mfaVerified: sessionRecord?.mfaVerified ?? false,
-      })
+  const accessToken = await signAccessToken({
+    userId,
+    sessionId,
+    role: profile.role,
+    mfaVerified: sessionRecord?.mfaVerified ?? false,
+  });
 
-      auditLog({
-            actorId: userId,
-            action: 'auth.refresh',
-            resourceType: 'session',
-            resourceId: sessionId,
-            ipAddress: params.ipAddress,
-            requestId: params.requestId,
-            correlationId: params.correlationId,
-      })
+  auditLog({
+    actorId: userId,
+    action: 'auth.refresh',
+    resourceType: 'session',
+    resourceId: sessionId,
+    ipAddress: params.ipAddress,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+  });
 
-      return { accessToken, refreshToken: newToken }
+  return { accessToken, refreshToken: newToken };
 }
 
 // ─── Email Verification ─────────────────────────────────────────
 
 interface VerifyEmailParams {
-      token: string
-      requestId: string
-      correlationId: string
+  token: string;
+  requestId: string;
+  correlationId: string;
 }
 
 export async function verifyEmail(params: VerifyEmailParams): Promise<void> {
-      const db = getDb()
-      const tokenHash = sha256(params.token)
+  const db = getDb();
+  const tokenHash = sha256(params.token);
 
-      const [record] = await db
-            .select()
-            .from(emailVerifications)
-            .where(eq(emailVerifications.tokenHash, tokenHash))
-            .limit(1)
+  const [record] = await db
+    .select()
+    .from(emailVerifications)
+    .where(eq(emailVerifications.tokenHash, tokenHash))
+    .limit(1);
 
-      if (!record) throw new InvalidTokenError()
-      if (record.used) throw new InvalidTokenError()
-      if (record.expiresAt < new Date()) throw new TokenExpiredError()
+  if (!record) throw new InvalidTokenError();
+  if (record.used) throw new InvalidTokenError();
+  if (record.expiresAt < new Date()) throw new TokenExpiredError();
 
-      await db.transaction(async (tx) => {
-            await tx
-                  .update(emailVerifications)
-                  .set({ used: true })
-                  .where(eq(emailVerifications.id, record.id))
+  await db.transaction(async (tx) => {
+    await tx
+      .update(emailVerifications)
+      .set({ used: true })
+      .where(eq(emailVerifications.id, record.id));
 
-            await tx
-                  .update(users)
-                  .set({
-                        emailVerified: true,
-                        emailVerifiedAt: new Date(),
-                        updatedAt: new Date(),
-                  })
-                  .where(eq(users.id, record.userId))
+    await tx
+      .update(users)
+      .set({
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        updatedAt: new Date(),
       })
+      .where(eq(users.id, record.userId));
+  });
 
-      auditLog({
-            actorId: record.userId,
-            action: 'auth.email_verification.completed',
-            resourceType: 'user',
-            resourceId: record.userId,
-            requestId: params.requestId,
-            correlationId: params.correlationId,
-      })
+  auditLog({
+    actorId: record.userId,
+    action: 'auth.email_verification.completed',
+    resourceType: 'user',
+    resourceId: record.userId,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+  });
+}
+
+// ─── Resend Verification Email ─────────────────────────────────
+
+interface ResendVerificationParams {
+  email: string;
+  requestId: string;
+  correlationId: string;
+}
+
+/**
+ * Resend verification email for a registered user.
+ *
+ * Security considerations:
+ * - Returns success even if the email is not registered (anti-enumeration)
+ * - Skips silently if the user's email is already verified
+ * - Invalidates all prior unused tokens to prevent token flooding
+ * - Generates a fresh token with a new TTL
+ * - Rate-limited at the route level (5 req/min)
+ */
+export async function resendVerification(params: ResendVerificationParams): Promise<void> {
+  const user = await findUserByEmail(params.email);
+
+  // Anti-enumeration: always succeed silently
+  if (!user) return;
+  if (user.emailVerified) return;
+
+  const db = getDb();
+
+  // Invalidate all prior unused tokens for this user
+  await db
+    .update(emailVerifications)
+    .set({ used: true })
+    .where(and(eq(emailVerifications.userId, user.id), eq(emailVerifications.used, false)));
+
+  // Generate fresh verification token
+  const rawToken = generateToken(32);
+  const tokenHash = sha256(rawToken);
+
+  await db.insert(emailVerifications).values({
+    userId: user.id,
+    tokenHash,
+    expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TTL_SEC * 1000),
+  });
+
+  // Queue verification email
+  const env = getEnv();
+  const verificationUrl = `${env.APP_URL}/verify-email?token=${rawToken}`;
+  queueVerificationEmail(
+    user.email,
+    {
+      userName: user.displayName ?? user.email,
+      verificationUrl,
+      expiresInHours: Math.round(EMAIL_VERIFICATION_TTL_SEC / 3600),
+    },
+    params.correlationId,
+  );
+
+  auditLog({
+    actorId: user.id,
+    action: 'auth.email_verification.resent',
+    resourceType: 'user',
+    resourceId: user.id,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+  });
 }
 
 // ─── Password Reset Request ────────────────────────────────────
 
 interface RequestPasswordResetParams {
-      email: string
-      ipAddress: string
-      requestId: string
-      correlationId: string
+  email: string;
+  ipAddress: string;
+  requestId: string;
+  correlationId: string;
 }
 
 export async function requestPasswordReset(
-      params: RequestPasswordResetParams,
+  params: RequestPasswordResetParams,
 ): Promise<{ token?: string }> {
-      const user = await findUserByEmail(params.email)
+  const user = await findUserByEmail(params.email);
 
-      // Always return success for anti-enumeration
-      if (!user) return {}
+  // Always return success for anti-enumeration
+  if (!user) return {};
 
-      const rawToken = generateToken(32)
-      const tokenHash = sha256(rawToken)
+  const rawToken = generateToken(32);
+  const tokenHash = sha256(rawToken);
 
-      const db = getDb()
+  const db = getDb();
 
-      // Invalidate all prior unused reset tokens for this user
-      await db
-            .update(passwordResets)
-            .set({ used: true, usedAt: new Date() })
-            .where(
-                  and(
-                        eq(passwordResets.userId, user.id),
-                        eq(passwordResets.used, false),
-                  ),
-            )
+  // Invalidate all prior unused reset tokens for this user
+  await db
+    .update(passwordResets)
+    .set({ used: true, usedAt: new Date() })
+    .where(and(eq(passwordResets.userId, user.id), eq(passwordResets.used, false)));
 
-      await db.insert(passwordResets).values({
-            userId: user.id,
-            tokenHash,
-            expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_SEC * 1000),
-            ipAddress: params.ipAddress,
-      })
+  await db.insert(passwordResets).values({
+    userId: user.id,
+    tokenHash,
+    expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_SEC * 1000),
+    ipAddress: params.ipAddress,
+  });
 
-      auditLog({
-            actorId: user.id,
-            action: 'auth.password_reset.requested',
-            resourceType: 'user',
-            resourceId: user.id,
-            ipAddress: params.ipAddress,
-            requestId: params.requestId,
-            correlationId: params.correlationId,
-      })
+  auditLog({
+    actorId: user.id,
+    action: 'auth.password_reset.requested',
+    resourceType: 'user',
+    resourceId: user.id,
+    ipAddress: params.ipAddress,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+  });
 
-      // Queue password reset email (async, non-blocking)
-      const env = getEnv()
-      const resetUrl = `${env.APP_URL}/auth/reset-password?token=${rawToken}`
-      queuePasswordResetEmail(
-            user.email,
-            {
-                  userName: user.displayName ?? user.email,
-                  resetUrl,
-                  expiresInMinutes: Math.round(PASSWORD_RESET_TTL_SEC / 60),
-                  ipAddress: params.ipAddress,
-            },
-            params.correlationId,
-      )
+  // Queue password reset email (async, non-blocking)
+  const env = getEnv();
+  const resetUrl = `${env.APP_URL}/reset-password?token=${rawToken}`;
+  queuePasswordResetEmail(
+    user.email,
+    {
+      userName: user.displayName ?? user.email,
+      resetUrl,
+      expiresInMinutes: Math.round(PASSWORD_RESET_TTL_SEC / 60),
+      ipAddress: params.ipAddress,
+    },
+    params.correlationId,
+  );
 
-      return { token: rawToken }
+  return { token: rawToken };
 }
 
 // ─── Password Reset ────────────────────────────────────────────
 
 interface ResetPasswordParams {
-      token: string
-      newPassword: string
-      ipAddress: string
-      requestId: string
-      correlationId: string
+  token: string;
+  newPassword: string;
+  ipAddress: string;
+  requestId: string;
+  correlationId: string;
 }
 
-export async function resetPassword(
-      params: ResetPasswordParams,
-): Promise<void> {
-      const db = getDb()
-      const tokenHash = sha256(params.token)
+export async function resetPassword(params: ResetPasswordParams): Promise<void> {
+  const db = getDb();
+  const tokenHash = sha256(params.token);
 
-      const [record] = await db
-            .select()
-            .from(passwordResets)
-            .where(eq(passwordResets.tokenHash, tokenHash))
-            .limit(1)
+  const [record] = await db
+    .select()
+    .from(passwordResets)
+    .where(eq(passwordResets.tokenHash, tokenHash))
+    .limit(1);
 
-      if (!record) throw new InvalidTokenError()
-      if (record.used) throw new InvalidTokenError()
-      if (record.expiresAt < new Date()) throw new TokenExpiredError()
+  if (!record) throw new InvalidTokenError();
+  if (record.used) throw new InvalidTokenError();
+  if (record.expiresAt < new Date()) throw new TokenExpiredError();
 
-      const newPasswordHash = await hashPassword(params.newPassword)
+  const newPasswordHash = await hashPassword(params.newPassword);
 
-      await db.transaction(async (tx) => {
-            await tx
-                  .update(passwordResets)
-                  .set({ used: true, usedAt: new Date() })
-                  .where(eq(passwordResets.id, record.id))
+  await db.transaction(async (tx) => {
+    await tx
+      .update(passwordResets)
+      .set({ used: true, usedAt: new Date() })
+      .where(eq(passwordResets.id, record.id));
 
-            await tx
-                  .update(users)
-                  .set({ passwordHash: newPasswordHash, updatedAt: new Date() })
-                  .where(eq(users.id, record.userId))
-      })
+    await tx
+      .update(users)
+      .set({ passwordHash: newPasswordHash, updatedAt: new Date() })
+      .where(eq(users.id, record.userId));
+  });
 
-      // Revoke all sessions after password reset
-      await revokeAllUserSessions(record.userId)
+  // Revoke all sessions after password reset
+  await revokeAllUserSessions(record.userId);
 
-      auditLog({
-            actorId: record.userId,
-            action: 'auth.password_reset.completed',
-            resourceType: 'user',
-            resourceId: record.userId,
-            ipAddress: params.ipAddress,
-            requestId: params.requestId,
-            correlationId: params.correlationId,
-      })
+  auditLog({
+    resourceType: 'user',
+    actorId: record.userId,
+    resourceId: record.userId,
+    ipAddress: params.ipAddress,
+    requestId: params.requestId,
+    correlationId: params.correlationId,
+    action: 'auth.password_reset.completed',
+  });
 }

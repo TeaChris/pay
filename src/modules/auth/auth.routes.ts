@@ -11,6 +11,7 @@ import {
       registerSchema,
       loginSchema,
       verifyEmailSchema,
+      resendVerificationSchema,
       requestPasswordResetSchema,
       resetPasswordSchema,
 } from './auth.schemas.js'
@@ -21,6 +22,7 @@ import {
       logout,
       refresh,
       verifyEmail,
+      resendVerification,
       requestPasswordReset,
       resetPassword,
 } from './auth.service.js'
@@ -196,6 +198,28 @@ authRoutes.post(
             return c.json({
                   success: true,
                   data: { message: AUTH_MESSAGES.EMAIL_VERIFICATION_SUCCESS },
+            })
+      },
+)
+
+// ─── POST /resend-verification ──────────────────────────────────
+authRoutes.post(
+      '/resend-verification',
+      rateLimiter(RATE_LIMITS.emailVerification, 'resend-verification'),
+      validateBody(resendVerificationSchema),
+      async (c) => {
+            const { email } = c.req.valid('json')
+
+            await resendVerification({
+                  email,
+                  requestId: c.get('requestId'),
+                  correlationId: c.get('correlationId'),
+            })
+
+            // Always return success (anti-enumeration)
+            return c.json({
+                  success: true,
+                  data: { message: AUTH_MESSAGES.EMAIL_VERIFICATION_SENT },
             })
       },
 )
