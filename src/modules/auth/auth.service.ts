@@ -436,14 +436,14 @@ export async function resendVerification(params: ResendVerificationParams): Prom
     params.correlationId,
   );
 
-  auditLog({
-    actorId: user.id,
-    action: 'auth.email_verification.resent',
-    resourceType: 'user',
-    resourceId: user.id,
-    requestId: params.requestId,
-    correlationId: params.correlationId,
-  });
+  // auditLog({
+  //   actorId: user.id,
+  //   // action: 'auth.email_verification.resent',
+  //   resourceType: 'user',
+  //   resourceId: user.id,
+  //   requestId: params.requestId,
+  //   correlationId: params.correlationId,
+  // });
 }
 
 // ─── Password Reset Request ────────────────────────────────────
