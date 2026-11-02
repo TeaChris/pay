@@ -18,5 +18,6 @@ export function generateRecoveryCodes(count: number): string[] {
     const hex = randomBytes(8).toString('hex');
     codes.push(`${hex.slice(0, 4)}-${hex.slice(4, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}`);
   }
+
   return codes;
 }
