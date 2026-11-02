@@ -1,5 +1,5 @@
-import { zValidator } from '@hono/zod-validator';
 import type { z, ZodSchema } from 'zod';
+import { zValidator } from '@hono/zod-validator';
 import { ValidationError } from '../shared/errors.js';
 
 /**
