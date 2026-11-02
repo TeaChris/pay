@@ -1,10 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { createMiddleware } from 'hono/factory';
 import type { AppEnv } from '../shared/types.js';
-import type { RateLimitConfig } from '../config/constants.js';
 import { RateLimitError } from '../shared/errors.js';
-import { getRedis } from '../infrastructure/redis/client.js';
 import { RedisKeys } from '../infrastructure/redis/keys.js';
-import { randomUUID } from 'node:crypto';
+import { getRedis } from '../infrastructure/redis/client.js';
+import type { RateLimitConfig } from '../config/constants.js';
 
 /**
  * Lua script for atomic sliding window rate limiting.
@@ -29,7 +29,9 @@ const SLIDING_WINDOW_LUA = `
   end
 `;
 
-export type KeyExtractor = (c: Parameters<Parameters<typeof createMiddleware<AppEnv>>[0]>[0]) => string;
+export type KeyExtractor = (
+  c: Parameters<Parameters<typeof createMiddleware<AppEnv>>[0]>[0],
+) => string;
 
 /**
  * Factory for Redis-backed sliding window rate limiter middleware.
@@ -38,11 +40,7 @@ export type KeyExtractor = (c: Parameters<Parameters<typeof createMiddleware<App
  * @param scope - Namespace for the rate limit key (e.g., 'login', 'register')
  * @param keyExtractor - Function to derive the rate limit key from request context
  */
-export function rateLimiter(
-  config: RateLimitConfig,
-  scope: string,
-  keyExtractor?: KeyExtractor,
-) {
+export function rateLimiter(config: RateLimitConfig, scope: string, keyExtractor?: KeyExtractor) {
   return createMiddleware<AppEnv>(async (c, next) => {
     const identifier = keyExtractor ? keyExtractor(c) : c.get('clientIp');
     const key = RedisKeys.rateLimit(scope, identifier);
