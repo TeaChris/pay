@@ -36,14 +36,14 @@ import {
   AccountLockedError,
   InvalidTokenError,
   TokenExpiredError,
-  ConflictError,
+  // ConflictError,
   EmailNotVerifiedError,
 } from '../../shared/errors.js';
 import { EMAIL_VERIFICATION_TTL_SEC, PASSWORD_RESET_TTL_SEC } from '../../config/constants.js';
 import {
   queueVerificationEmail,
   queuePasswordResetEmail,
-  queueAccountLockedEmail,
+  // queueAccountLockedEmail,
 } from '../email/email.service.js';
 
 // ─── Registration ───────────────────────────────────────────────
@@ -268,11 +268,11 @@ export async function login(params: LoginParams) {
 // ─── Logout ─────────────────────────────────────────────────────
 
 interface LogoutParams {
-  sessionId: string;
   userId: string;
+  sessionId: string;
   requestId: string;
-  correlationId: string;
   ipAddress: string;
+  correlationId: string;
 }
 
 export async function logout(params: LogoutParams): Promise<void> {
@@ -282,9 +282,9 @@ export async function logout(params: LogoutParams): Promise<void> {
     actorId: params.userId,
     action: 'auth.logout',
     resourceType: 'session',
-    resourceId: params.sessionId,
     ipAddress: params.ipAddress,
     requestId: params.requestId,
+    resourceId: params.sessionId,
     correlationId: params.correlationId,
   });
 }
@@ -292,11 +292,11 @@ export async function logout(params: LogoutParams): Promise<void> {
 // ─── Refresh ────────────────────────────────────────────────────
 
 interface RefreshParams {
-  rawRefreshToken: string;
   ipAddress: string;
-  userAgent: string | null;
   requestId: string;
   correlationId: string;
+  rawRefreshToken: string;
+  userAgent: string | null;
 }
 
 export async function refresh(params: RefreshParams) {
