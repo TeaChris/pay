@@ -4,9 +4,9 @@
  */
 
 import { Queue } from 'bullmq';
+import type { EmailJobData } from './email.types.js';
 import { getRedis } from '../../infrastructure/redis/client.js';
 import { getLogger } from '../../infrastructure/logging/logger.js';
-import type { EmailJobData } from './email.types.js';
 
 export const EMAIL_QUEUE_NAME = 'email';
 
