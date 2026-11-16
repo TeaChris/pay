@@ -10,12 +10,12 @@
 
 import { Worker } from 'bullmq';
 import type { Job } from 'bullmq';
+import { EMAIL_QUEUE_NAME } from './email.queue.js';
+import type { EmailJobData } from './email.types.js';
+import { renderTemplate } from './templates/index.js';
 import { getRedis } from '../../infrastructure/redis/client.js';
 import { getLogger } from '../../infrastructure/logging/logger.js';
 import { getEmailProvider } from '../../infrastructure/email/index.js';
-import { renderTemplate } from './templates/index.js';
-import { EMAIL_QUEUE_NAME } from './email.queue.js';
-import type { EmailJobData } from './email.types.js';
 
 /** Idempotency keys expire after 48h to prevent indefinite growth. */
 const IDEMPOTENCY_TTL_SEC = 172_800;
@@ -79,10 +79,7 @@ export function startEmailWorker(): Worker<EmailJobData> {
       // ─── Mark as Sent (Idempotency) ─────────────────────────
       await redis.set(idempotencyKey, result.id, 'EX', IDEMPOTENCY_TTL_SEC);
 
-      logger.info(
-        { ...logContext, messageId: result.id },
-        'email worker: email sent successfully',
-      );
+      logger.info({ ...logContext, messageId: result.id }, 'email worker: email sent successfully');
     },
     {
       connection: getRedis().duplicate({ maxRetriesPerRequest: null }),
