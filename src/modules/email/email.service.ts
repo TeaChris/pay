@@ -12,27 +12,27 @@ import { randomUUID } from 'node:crypto';
 import { getLogger } from '../../infrastructure/logging/logger.js';
 import { getEmailQueue } from './email.queue.js';
 import type {
-  EmailCategory,
   EmailType,
   TemplateData,
-  EmailVerificationData,
-  PasswordResetData,
   MagicLinkData,
-  MfaVerificationData,
-  AccountRecoveryData,
-  NewDeviceLoginData,
-  PasswordChangedData,
+  EmailCategory,
   EmailChangedData,
-  SuspiciousActivityData,
-  AccountLockedData,
   TransferSentData,
-  TransferReceivedData,
-  PaymentCompletedData,
-  PaymentFailedData,
-  RefundProcessedData,
-  ProductUpdateData,
-  ComplianceNotificationData,
   AccountAlertData,
+  PasswordResetData,
+  PaymentFailedData,
+  AccountLockedData,
+  ProductUpdateData,
+  NewDeviceLoginData,
+  AccountRecoveryData,
+  PasswordChangedData,
+  MfaVerificationData,
+  RefundProcessedData,
+  PaymentCompletedData,
+  TransferReceivedData,
+  EmailVerificationData,
+  SuspiciousActivityData,
+  ComplianceNotificationData,
 } from './email.types.js';
 
 // ─── Core Enqueue Function ──────────────────────────────────────
@@ -109,11 +109,7 @@ export function queueVerificationEmail(
   });
 }
 
-export function queueMagicLinkEmail(
-  to: string,
-  data: MagicLinkData,
-  correlationId?: string,
-): void {
+export function queueMagicLinkEmail(to: string, data: MagicLinkData, correlationId?: string): void {
   enqueueEmail({
     to,
     type: 'magic_link',
